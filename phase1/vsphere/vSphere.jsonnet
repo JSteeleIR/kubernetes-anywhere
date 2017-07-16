@@ -1,7 +1,7 @@
 function(config)
   local tf = import "phase1/tf.jsonnet";
   local cfg = config.phase1;
-  local vms = std.makeArray(cfg.num_nodes + 1,function(node) node+1); 
+  local vms = std.makeArray(cfg.num_nodes + 1,function(node) node+1);
   local master_dependency_list = ["vsphere_virtual_machine.kubevm%d" % vm for vm in vms];
   local node_name_to_ip = [("${vsphere_virtual_machine.kubevm%d.network_interface.0.ipv4_address} %s"  % [vm, (if vm == 1 then "master" else "node%d" % (vm-1) )])  for vm in vms];
   local vm_username = "root";
@@ -22,7 +22,7 @@ function(config)
         addons_config: (import "phase3/all.jsonnet")(config),
       },
     });
-  
+
   std.mergePatch({
     // vSphere Configuration
     provider: {
@@ -33,7 +33,7 @@ function(config)
         allow_unverified_ssl: cfg.vSphere.insecure,
       },
     },
-    
+
      data: {
       template_file: {
         configure_master: {
@@ -50,7 +50,7 @@ function(config)
             flannel_net: cfg.vSphere.flannel_net,
             installer_container: config.phase2.installer_container,
             docker_registry: config.phase2.docker_registry,
-            kubernetes_version: config.phase2.kubernetes_version, 
+            kubernetes_version: config.phase2.kubernetes_version,
           },
         },
         configure_node: {
@@ -87,11 +87,11 @@ function(config)
       },
      },
 
-    
+
     resource: {
       "vsphere_folder":{
         "cluster_folder": {
-          datacenter: cfg.vSphere.datacenter, 
+          datacenter: cfg.vSphere.datacenter,
           path: cfg.cluster_name,
         },
       },
@@ -116,7 +116,7 @@ function(config)
             },
 
             disk: {
-              template: cfg.vSphere.template, 
+              template: cfg.vSphere.template,
               bootable: true,
               type: "thin",
               datastore: cfg.vSphere.datastore,
@@ -131,20 +131,39 @@ function(config)
               password: vm_password,
               host: "${vsphere_virtual_machine.kubevm1.network_interface.0.ipv4_address}"
             },
-            provisioner: [{
+            provisioner: [
+            {
+                "remote-exec": {
+                  inline: [
+                    "cp /lib/systemd/system/etcd.service /lib/systemd/system/etcd.service.bak",
+                    "tdnf upgrade -y --refresh",
+                    "tdnf install -y less",
+                    "cp /lib/systemd/system/etcd.server.bak /lib/systemd/system/etcd.service",
+                    "reboot"
+                  ]
+                }
+           },
+            {
+             "local-exec": {
+               command: "echo 'Sleeping to allow nodes to reboot....' && sleep 120"
+             },
+            },
+            {
                 "remote-exec": {
                   inline: [
                     "hostnamectl set-hostname %s" % "master",
-                    "mkdir -p /etc/kubernetes/; echo '%s' > /etc/kubernetes/k8s_config.json " % (config_metadata_template % "master"),                    
-                    "echo '%s' >  /etc/kubernetes/vsphere.conf" % "${data.template_file.cloudprovider.rendered}",            
-                    "echo '%s' > /etc/configure-vm.sh; bash /etc/configure-vm.sh" % "${data.template_file.configure_master.rendered}",
+                    "mkdir -p /etc/kubernetes/; echo '%s' > /etc/kubernetes/k8s_config.json " % (config_metadata_template % "master"),
+                    "echo '%s' >  /etc/kubernetes/vsphere.conf" % "${data.template_file.cloudprovider.rendered}",
+                    "echo '%s' > /etc/configure-vm.sh; #bash /etc/configure-vm.sh" % "${data.template_file.configure_master.rendered}",
                   ]
                 }
-           }, {
+           },
+           {
             "local-exec": {
               command: "echo '%s' > ./.tmp/kubeconfig.json" % kubeconfig(cfg.cluster_name + "-admin", cfg.cluster_name, cfg.cluster_name),
             },
-           }],
+           }
+           ],
         },} + {
         ["node" + vm]: {
             depends_on: ["vsphere_virtual_machine.kubevm1","vsphere_virtual_machine.kubevm%d" % vm],
@@ -153,17 +172,33 @@ function(config)
               password: vm_password,
               host: "${vsphere_virtual_machine.kubevm%d.network_interface.0.ipv4_address}" % vm
             },
-            provisioner: [{
+            provisioner: [
+            {
+                "remote-exec": {
+                  inline: [
+                    "cp /lib/systemd/system/etcd.server /lib/systemd/system/etcd.service.bak",
+                    "tdnf upgrade -y --refresh",
+                    "tdnf install -y less",
+                    "cp /lib/systemd/system/etcd.server.bak /lib/systemd/system/etcd.service",
+                    "reboot"
+                  ]
+                }
+            },
+            {
+             "local-exec": {
+               command: "echo 'Sleeping to allow nodes to reboot....' && sleep 120"
+             },
+            },
+            {
                 "remote-exec": {
                   inline: [
                     "hostnamectl set-hostname %s" % ("node" + (vm-1)),
-                    "mkdir -p /etc/kubernetes/; echo '%s' > /etc/kubernetes/k8s_config.json " % (config_metadata_template % "node"),                    
+                    "mkdir -p /etc/kubernetes/; echo '%s' > /etc/kubernetes/k8s_config.json " % (config_metadata_template % "node"),
                     "echo '%s' > /etc/configure-vm.sh; bash /etc/configure-vm.sh" % "${data.template_file.configure_node.rendered}",
-                    "echo '%s' >  /etc/kubernetes/vsphere.conf" % "${data.template_file.cloudprovider.rendered}",            
+                    "echo '%s' >  /etc/kubernetes/vsphere.conf" % "${data.template_file.cloudprovider.rendered}",
                   ]
                 }
            }],
         } for vm in vms if vm > 1 },
-    },    
+    },
   }, tf.pki.cluster_tls(cfg.cluster_name, ["%(cluster_name)s-master" % cfg], ["${vsphere_virtual_machine.kubevm1.network_interface.0.ipv4_address}"]))
-
