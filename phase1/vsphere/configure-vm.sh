@@ -2,6 +2,8 @@ mkdir -p /srv/kubernetes
 
 vm_ip=$(ip addr | grep' "'"'state UP'"'" '-A2 | tail -n1 | awk' "'"'{print $2}'"'" '| cut -f1  -d'"'"/"'"')
 
+
+echo "Configuring Flannel..."
 cat << EOF > "/etc/default/flannel"
 NETWORK=${flannel_net}
 ETCD_ENDPOINTS=http://${master_ip}:4000
@@ -36,7 +38,7 @@ if [ "${role}" == "master" ]; then
     echo -n "${root_ca_public_pem}" | base64 -d > "/srv/kubernetes/ca.pem"
     echo -n "${apiserver_cert_pem}" | base64 -d > "/srv/kubernetes/apiserver.pem"
     echo -n "${apiserver_key_pem}" | base64 -d > "/srv/kubernetes/apiserver-key.pem"
-    # Create kubernetes configuration 
+    # Create kubernetes configuration
     cat << EOF > "/srv/kubernetes/kubeconfig.json"
     ${master_kubeconfig}
 EOF
@@ -46,7 +48,7 @@ else
         echo "Failed to enable flannelc"
         exit 1
     fi
-    systemctl start flannelc    
+    systemctl start flannelc
     if [ $? -ne 0 ] || [ "`systemctl is-active flannelc`" != "active" ] ; then
         echo "Failed to start flannelc"
         exit 1
@@ -56,7 +58,7 @@ else
 EOF
 fi
 
-# Add dns entries to /etc/hosts 
+# Add dns entries to /etc/hosts
 echo "${nodes_dns_mappings}" >> /etc/hosts
 
 

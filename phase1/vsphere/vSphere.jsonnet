@@ -135,10 +135,10 @@ function(config)
             {
                 "remote-exec": {
                   inline: [
-                    "cp /lib/systemd/system/etcd.service /lib/systemd/system/etcd.service.bak",
-                    "tdnf upgrade -y --refresh",
+                    "cp /usr/lib/systemd/system/etcd.service /usr/lib/systemd/system/etcd.service.bak",
+                    "tdnf upgrade -y --refresh etcd",
                     "tdnf install -y less",
-                    "cp /lib/systemd/system/etcd.server.bak /lib/systemd/system/etcd.service",
+                    "cp /usr/lib/systemd/system/etcd.service.bak /usr/lib/systemd/system/etcd.service",
                     "reboot"
                   ]
                 }
@@ -176,10 +176,10 @@ function(config)
             {
                 "remote-exec": {
                   inline: [
-                    "cp /lib/systemd/system/etcd.server /lib/systemd/system/etcd.service.bak",
-                    "tdnf upgrade -y --refresh",
+                    "cp /usr/lib/systemd/system/etcd.service /usr/lib/systemd/system/etcd.service.bak",
+                    "tdnf upgrade -y --refresh etcd",
                     "tdnf install -y less",
-                    "cp /lib/systemd/system/etcd.server.bak /lib/systemd/system/etcd.service",
+                    "cp /usr/lib/systemd/system/etcd.service.bak /usr/lib/systemd/system/etcd.service",
                     "reboot"
                   ]
                 }
