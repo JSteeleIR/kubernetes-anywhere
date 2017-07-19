@@ -135,17 +135,20 @@ function(config)
             {
                 "remote-exec": {
                   inline: [
-                    "cp /usr/lib/systemd/system/etcd.service /usr/lib/systemd/system/etcd.service.bak",
-                    "tdnf upgrade -y --refresh etcd",
-                    "tdnf install -y less",
-                    "cp /usr/lib/systemd/system/etcd.service.bak /usr/lib/systemd/system/etcd.service",
-                    "reboot"
+                  "cp /usr/lib/systemd/system/etcd.service /usr/lib/systemd/system/etcd.service.bak",
+                  "tdnf upgrade -y --refresh",
+                  "tdnf install -y less",
+                  "systemctl daemon-reload",
+                  "systemctl start etcd && systemctl stop etcd",
+                  "cp /usr/lib/systemd/system/etcd.service /usr/lib/systemd/system/etcd.service.bak2",
+                  "cp /usr/lib/systemd/system/etcd.service.bak /usr/lib/systemd/system/etcd.service",
+                  "reboot"
                   ]
                 }
            },
             {
              "local-exec": {
-               command: "echo 'Sleeping to allow nodes to reboot....' && sleep 120"
+               command: "echo 'Sleeping to allow nodes to reboot....' && sleep 30"
              },
             },
             {
@@ -154,13 +157,13 @@ function(config)
                     "hostnamectl set-hostname %s" % "master",
                     "mkdir -p /etc/kubernetes/; echo '%s' > /etc/kubernetes/k8s_config.json " % (config_metadata_template % "master"),
                     "echo '%s' >  /etc/kubernetes/vsphere.conf" % "${data.template_file.cloudprovider.rendered}",
-                    "echo '%s' > /etc/configure-vm.sh; #bash /etc/configure-vm.sh" % "${data.template_file.configure_master.rendered}",
+                    "echo '%s' > /etc/configure-vm.sh; bash /etc/configure-vm.sh" % "${data.template_file.configure_master.rendered}",
                   ]
                 }
            },
            {
             "local-exec": {
-              command: "echo '%s' > ./.tmp/kubeconfig.json" % kubeconfig(cfg.cluster_name + "-admin", cfg.cluster_name, cfg.cluster_name),
+            command: "echo '%s' > ./.tmp/kubeconfig.json" % kubeconfig(cfg.cluster_name + "-admin", cfg.cluster_name, cfg.cluster_name),
             },
            }
            ],
@@ -176,17 +179,15 @@ function(config)
             {
                 "remote-exec": {
                   inline: [
-                    "cp /usr/lib/systemd/system/etcd.service /usr/lib/systemd/system/etcd.service.bak",
-                    "tdnf upgrade -y --refresh etcd",
+                    "tdnf upgrade -y --refresh",
                     "tdnf install -y less",
-                    "cp /usr/lib/systemd/system/etcd.service.bak /usr/lib/systemd/system/etcd.service",
                     "reboot"
                   ]
                 }
             },
             {
              "local-exec": {
-               command: "echo 'Sleeping to allow nodes to reboot....' && sleep 120"
+               command: "echo 'Sleeping to allow nodes to reboot....' && sleep 30"
              },
             },
             {

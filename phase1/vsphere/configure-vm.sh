@@ -10,7 +10,6 @@ ETCD_ENDPOINTS=http://${master_ip}:4000
 IFace=$vm_ip
 EOF
 
-
 if [ "${role}" == "master" ]; then
     # Download & Start etcd
     systemctl enable etcd
