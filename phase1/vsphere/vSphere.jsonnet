@@ -135,13 +135,11 @@ function(config)
             {
                 "remote-exec": {
                   inline: [
-                  "cp /usr/lib/systemd/system/etcd.service /usr/lib/systemd/system/etcd.service.bak",
-                  "tdnf upgrade -y --refresh",
+                  "tdnf upgrade etcd linux-esx -y --refresh",
                   "tdnf install -y less",
+                  "sed -ie 's|ExecStart=/bin/bash -c \"/usr/bin/etcd\"|ExecStart=/bin/bash -c \"/usr/bin/etcd --initial-cluster default=http://localhost:4000 --initial-advertise-peer-urls http://localhost:4000 --listen-client-urls http://0.0.0.0:4000 --listen-peer-urls http://0.0.0.0:4001 --advertise-client-urls http://0.0.0.0:4000\"|' /usr/lib/systemd/system/etcd.service",
                   "systemctl daemon-reload",
-                  "systemctl start etcd && systemctl stop etcd",
-                  "cp /usr/lib/systemd/system/etcd.service /usr/lib/systemd/system/etcd.service.bak2",
-                  "cp /usr/lib/systemd/system/etcd.service.bak /usr/lib/systemd/system/etcd.service",
+                  "#systemctl start etcd && systemctl stop etcd",
                   "reboot"
                   ]
                 }
@@ -179,7 +177,7 @@ function(config)
             {
                 "remote-exec": {
                   inline: [
-                    "tdnf upgrade -y --refresh",
+                    "tdnf upgrade linux-esx -y --refresh",
                     "tdnf install -y less",
                     "reboot"
                   ]
