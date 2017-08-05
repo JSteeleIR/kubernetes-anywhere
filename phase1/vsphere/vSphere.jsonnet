@@ -135,23 +135,6 @@ function(config)
             {
                 "remote-exec": {
                   inline: [
-                  "tdnf upgrade etcd linux-esx -y --refresh",
-                  "tdnf install -y less",
-                  "sed -ie 's|ExecStart=/bin/bash -c \"/usr/bin/etcd\"|ExecStart=/bin/bash -c \"/usr/bin/etcd --initial-cluster default=http://localhost:4000 --initial-advertise-peer-urls http://localhost:4000 --listen-client-urls http://0.0.0.0:4000 --listen-peer-urls http://0.0.0.0:4001 --advertise-client-urls http://0.0.0.0:4000\"|' /usr/lib/systemd/system/etcd.service",
-                  "systemctl daemon-reload",
-                  "#systemctl start etcd && systemctl stop etcd",
-                  "reboot"
-                  ]
-                }
-           },
-            {
-             "local-exec": {
-               command: "echo 'Sleeping to allow nodes to reboot....' && sleep 30"
-             },
-            },
-            {
-                "remote-exec": {
-                  inline: [
                     "hostnamectl set-hostname %s" % "master",
                     "mkdir -p /etc/kubernetes/; echo '%s' > /etc/kubernetes/k8s_config.json " % (config_metadata_template % "master"),
                     "echo '%s' >  /etc/kubernetes/vsphere.conf" % "${data.template_file.cloudprovider.rendered}",
@@ -160,6 +143,11 @@ function(config)
                 }
            },
            {
+             "local-exec": {
+               command: "echo 'Sleeping to allow nodes to reboot....' && sleep 30"
+             },
+            },
+            {
             "local-exec": {
             command: "echo '%s' > ./.tmp/kubeconfig.json" % kubeconfig(cfg.cluster_name + "-admin", cfg.cluster_name, cfg.cluster_name),
             },
@@ -177,27 +165,18 @@ function(config)
             {
                 "remote-exec": {
                   inline: [
-                    "tdnf upgrade linux-esx -y --refresh",
-                    "tdnf install -y less",
-                    "reboot"
+                    "hostnamectl set-hostname %s" % ("node" + (vm-1)),
+                    "mkdir -p /etc/kubernetes/; echo '%s' > /etc/kubernetes/k8s_config.json " % (config_metadata_template % "node"),
+                    "echo '%s' >  /etc/kubernetes/vsphere.conf" % "${data.template_file.cloudprovider.rendered}",
+                    "echo '%s' > /etc/configure-vm.sh; bash /etc/configure-vm.sh" % "${data.template_file.configure_node.rendered}",
                   ]
                 }
-            },
-            {
+           },
+           {
              "local-exec": {
                command: "echo 'Sleeping to allow nodes to reboot....' && sleep 30"
              },
-            },
-            {
-                "remote-exec": {
-                  inline: [
-                    "hostnamectl set-hostname %s" % ("node" + (vm-1)),
-                    "mkdir -p /etc/kubernetes/; echo '%s' > /etc/kubernetes/k8s_config.json " % (config_metadata_template % "node"),
-                    "echo '%s' > /etc/configure-vm.sh; bash /etc/configure-vm.sh" % "${data.template_file.configure_node.rendered}",
-                    "echo '%s' >  /etc/kubernetes/vsphere.conf" % "${data.template_file.cloudprovider.rendered}",
-                  ]
-                }
-           }],
+            }],
         } for vm in vms if vm > 1 },
     },
   }, tf.pki.cluster_tls(cfg.cluster_name, ["%(cluster_name)s-master" % cfg], ["${vsphere_virtual_machine.kubevm1.network_interface.0.ipv4_address}"]))
