@@ -114,13 +114,18 @@ function(config)
             network_interface: {
               label: cfg.vSphere.network,
             },
-
-            disk: {
+            disk: [{
               template: cfg.vSphere.template,
               bootable: true,
               type: "thin",
               datastore: cfg.vSphere.datastore,
             },
+            {
+              datastore: cfg.vSphere.datastore,
+              size: 100,
+              name: "PortWorXPD",
+              type: "thin",
+            }]
         } for vm in vms
       },
       null_resource: {
