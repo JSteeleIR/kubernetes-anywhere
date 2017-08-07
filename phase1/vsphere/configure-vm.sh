@@ -113,5 +113,7 @@ tdnf install -y --refresh less yum curl
 yum update -y --exclude=docker
 echo "Rewriting etcd systemd unit..."
 sed -ie '"'"'s|ExecStart=/bin/bash -c "/usr/bin/etcd"|ExecStart=/bin/bash -c "/usr/bin/etcd --initial-cluster default=http://localhost:4000 --initial-advertise-peer-urls http://localhost:4000 --listen-client-urls http://0.0.0.0:4000 --listen-peer-urls http://0.0.0.0:4001 --advertise-client-urls http://0.0.0.0:4000"|'"'"' /usr/lib/systemd/system/etcd.service
+echo "Adding dm_thin_pool module to start at boot..."
+echo "dm_thin_pool" >> /etc/modules-load.d/dm_thin_pool.conf
 echo "Rebooting!"
 reboot
