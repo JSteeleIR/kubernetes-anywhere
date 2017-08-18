@@ -123,7 +123,7 @@ function(config)
             {
               datastore: cfg.vSphere.datastore,
               size: 100,
-              name: "PortWorXPD",
+              name: "GlusterPD",
               type: "thin",
             }]
         } for vm in vms
