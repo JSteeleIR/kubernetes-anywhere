@@ -5,17 +5,20 @@ set -o pipefail
 set -o nounset
 
 cd "${BASH_SOURCE%/*}"
-f="./../../.config.json"
+
+CLUSTER_NAME=$(jq -r '.phase1.cluster_name' ../../.config.json)
+CLUSTER_DIR=clusters/${CLUSTER_NAME}
+TMP_DIR=${CLUSTER_DIR}/.tmp
 
 gen() {
-  mkdir -p .tmp/
-  jsonnet -J ../../ --multi .tmp/ all.jsonnet
+  mkdir -p ${TMP_DIR}
+  jsonnet -J ../../ --multi ${TMP_DIR} all.jsonnet
 }
 
 
 deploy() {
   gen
-  terraform apply -state=./.tmp/terraform.tfstate .tmp
+  terraform apply -state=${CLUSTER_DIR}/terraform.tfstate ${TMP_DIR}
   COMMAND="grep '.phase2.kubernetes_version' ../../.config | cut -d '=' -f2 | tr -d '\"'"
   KUBERNETES_VERSION=$(eval $COMMAND)
   # If the kubectl binary doesn't exist download it.
@@ -40,10 +43,22 @@ deploy() {
 
 destroy() {
   if [[ "${FORCE_DESTROY:-}" == "y" ]]; then
-    terraform destroy -state=./.tmp/terraform.tfstate -force .tmp
+    terraform destroy -state=${CLUSTER_DIR}/terraform.tfstate -force ${TMP_DIR}
   else
-    terraform destroy -state=./.tmp/terraform.tfstate .tmp
+    terraform destroy -state=${CLUSTER_DIR}/terraform.tfstate ${TMP_DIR}
   fi
+}
+
+execute_host() {
+  HOST=$1
+  COMMAND=$2
+  echo Upgrade master not implemented. >&2
+  exit 1
+}
+
+master_host() {
+  echo Upgrade master not implemented. >&2
+  exit 1
 }
 
 case "${1:-}" in
@@ -55,7 +70,13 @@ case "${1:-}" in
   "destroy-cluster")
     destroy
     ;;
+  "execute-host")
+    execute_host "${@:2}"
+    ;;
   "gen")
     gen
+    ;;
+  "master-host")
+    master_host
     ;;
 esac

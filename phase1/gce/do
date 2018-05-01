@@ -1,4 +1,4 @@
-#! /bin/bash
+#!/bin/bash
 
 set -o errexit
 set -o pipefail
@@ -7,22 +7,29 @@ set -x
 
 cd "${BASH_SOURCE%/*}"
 
+CONFIG_FILE="${CONFIG_JSON_FILE:-../../.config.json}"
+KUBE_CONTEXT_NAME=$(jq -r '.phase2.kube_context_name | values' ${CONFIG_FILE})
+CLUSTER_NAME=$(jq -r '.phase1.cluster_name' ${CONFIG_FILE})
+CLUSTER_DIR=clusters/${CLUSTER_NAME}
+TMP_DIR=${CLUSTER_DIR}/.tmp
+
 generate_token() {
   perl -e 'printf "%06x.%08x%08x\n", rand(0xffffff), rand(0xffffffff), rand(0xffffffff);'
 }
 
 gen() {
   TOKEN=$(generate_token)
-  mkdir -p .tmp/
-  jsonnet -J ../../ --multi .tmp/ all.jsonnet
-  echo "kubeadm_token = \"$TOKEN\"" > .tmp/terraform.tfvars
+  mkdir -p ${TMP_DIR}
+  jsonnet -J ../../ --multi ${TMP_DIR} --tla-code-file cfg=${CONFIG_FILE} all.jsonnet
+  echo "kubeadm_token = \"$TOKEN\"" > ${CLUSTER_DIR}/terraform.tfvars
 }
 
 deploy() {
   gen
-  terraform apply -var-file .tmp/terraform.tfvars .tmp
+  terraform apply -var-file=${CLUSTER_DIR}/terraform.tfvars -state=${CLUSTER_DIR}/terraform.tfstate ${TMP_DIR}
 
-  if [[ "${WAIT_FOR_KUBECONFIG:-}" == "y" ]]; then
+  PHASE2=$(jq -r '.phase2.provider' ${CONFIG_FILE})
+  if [[ "${PHASE2}" == "kubeadm" ]]; then
     fetch_kubeconfig
   fi
 }
@@ -33,13 +40,15 @@ deploy() {
 # terraform. In order to access the cluster remotely, we need to fetch the
 # proper kubeconfig from the master.
 fetch_kubeconfig() {
-  PHASE2=$(jq -r '.phase2.provider' ../../.config.json)
-  PROJECT=$(jq -r '.phase1.gce.project' ../../.config.json)
-  ZONE=$(jq -r '.phase1.gce.zone' ../../.config.json)
-  MASTER=$(jq -r '.phase1.cluster_name' ../../.config.json)-master
+  PROJECT=$(jq -r '.phase1.gce.project' ${CONFIG_FILE})
+  ZONE=$(jq -r '.phase1.gce.zone' ${CONFIG_FILE})
+  MASTER=$(jq -r '.phase1.cluster_name' ${CONFIG_FILE})-master
+  SSHUSER=$(jq -r '.phase1.ssh_user | values' ${CONFIG_FILE})
 
-  if [[ "$PHASE2" != kubeadm ]]; then
-    return
+  if [[ -n "${SSHUSER}" ]]; then
+    SSHUSER="${SSHUSER}@"
+  elif [[ -n "${USER:-}" ]]; then
+    SSHUSER="${USER}@"
   fi
 
   for tries in {1..60}; do
@@ -50,9 +59,18 @@ fetch_kubeconfig() {
     # succeeds, then stdout is tainted by ssh initialization output, so we echo
     # a marker to indicate the start of the file, and delete all lines up to and
     # including it.
-    if gcloud compute ssh --project "$PROJECT" --zone "$ZONE" "$MASTER" --command "echo STARTFILE; sudo cat /etc/kubernetes/admin.conf" > .tmp/kubeconfig.raw; then
-      sed '0,/^STARTFILE$/d' .tmp/kubeconfig.raw > .tmp/kubeconfig.json
+    if gcloud compute ssh --project "$PROJECT" --zone "$ZONE" "$SSHUSER$MASTER" --command "echo STARTFILE; sudo cat /etc/kubernetes/admin.conf" > ${TMP_DIR}/kubeconfig.raw; then
+      sed '/^STARTFILE$/,$!d;/^STARTFILE$/d' ${TMP_DIR}/kubeconfig.raw > ${CLUSTER_DIR}/kubeconfig.json
       echo Successfully fetched kubeconfig.
+
+      if [[ -n "${KUBE_CONTEXT_NAME}" ]]; then
+        # kubeconfig.json fetched from master node has the user, cluster and context all hardcoded with
+        # 'kubernetes' keyword. So replace 'kubernetes' with the cluster_name.
+        # TODO: use `kubectl config rename-(context,cluster,user)` sub-commands whenever they are available
+        sed -i "s/kubernetes/${CLUSTER_NAME}/g" ${CLUSTER_DIR}/kubeconfig.json
+        sed -i "s/${CLUSTER_NAME}-admin@${CLUSTER_NAME}/${KUBE_CONTEXT_NAME}/" ${CLUSTER_DIR}/kubeconfig.json
+      fi
+
       return
     else
       sleep 5
@@ -68,7 +86,28 @@ destroy() {
   if [[ "${FORCE_DESTROY:-}" == "y" ]]; then
     FLAGS="-force"
   fi
-  terraform destroy -var-file .tmp/terraform.tfvars $FLAGS .tmp
+  terraform destroy -var-file=${CLUSTER_DIR}/terraform.tfvars -state=${CLUSTER_DIR}/terraform.tfstate $FLAGS ${TMP_DIR}
+}
+
+execute_host() {
+  HOST=$1
+  COMMAND=$2
+  PROJECT=$(jq -r '.phase1.gce.project' ${CONFIG_FILE})
+  ZONE=$(jq -r '.phase1.gce.zone' ${CONFIG_FILE})
+  MASTER=$(jq -r '.phase1.cluster_name' ${CONFIG_FILE})-master
+  SSHUSER=$(jq -r '.phase1.ssh_user | values' ${CONFIG_FILE})
+
+  if [[ -n "${SSHUSER}" ]]; then
+    SSHUSER="${SSHUSER}@"
+  elif [[ -n "${USER:-}" ]]; then
+    SSHUSER="${USER}@"
+  fi
+
+  gcloud compute ssh --project "$PROJECT" --zone "$ZONE" "${SSHUSER}${MASTER}" --command "$2" >&1
+}
+
+master_host() {
+  echo $(jq -r '.phase1.cluster_name' ${CONFIG_FILE})-master
 }
 
 case "${1:-}" in
@@ -80,7 +119,13 @@ case "${1:-}" in
   "destroy-cluster")
     destroy
     ;;
+  "execute-host")
+    execute_host "${@:2}"
+    ;;
   "gen")
     gen
+    ;;
+  "master-host")
+    master_host
     ;;
 esac

@@ -1,9 +1,11 @@
 
 menu "Phase 2: Node Bootstrapping"
 
-config phase2.installer_container
-	string "installer container"
-	default "docker.io/cnastorage/k8s-ignition:v2"
+config phase2.kubernetes_version
+	string "kubernetes version"
+	default "v1.8.4"
+	help
+	  The version of Kubernetes to deploy to the control plane.
 
 config phase2.docker_registry
 	string "docker registry"
@@ -11,19 +13,30 @@ config phase2.docker_registry
 	help
 	  The docker registry to pull cluster components from.
 
-config phase2.kubernetes_version
-	string "kubernetes version"
-	default "v1.6.5"
-	help
-	  The version of Kubernetes to deploy.
-
 config phase2.provider
 	string "bootstrap provider"
+	default "kubeadm" if phase1.cloud_provider = "gce" || phase1.cloud_provider = "openstack"
 	default "ignition"
 	help
 	  The bootstrap provider to use.
 
 	  Valid options are (ignition, kubeadm).
+
+config phase2.proxy_mode
+	string "kube-proxy mode: iptables or ipvs"
+	default "iptables"
+	help
+	  The kube-proxy mode to use.
+
+	  Valid options are (iptables, ipvs).
+
+if phase2.provider = ignition
+
+config phase2.installer_container
+	string "installer container"
+	default "docker.io/cnastorage/k8s-ignition:v2"
+
+endif
 
 if phase2.provider = kubeadm
 
@@ -34,6 +47,47 @@ config phase2.kubeadm.version
 	  The version of kubeadm to use.
 
 	  Valid options are "stable" or a Google Cloud Storage link to a build.
+
+config phase2.kubelet_version
+	string "kubelet version"
+	default "stable"
+	help
+	  The version of kubelet to use.
+
+	  Valid options are "stable" or a Google Cloud Storage link to a build.
+
+config phase2.kubeadm.master_upgrade.method
+	string "kubeadm master upgrade method"
+	default "upgrade"
+	help
+	  The kubeadm method of master upgrade to use.
+
+	  Valid options are (upgrade,init).
+	  Formally supported options are (upgrade).
+
+config phase2.kube_context_name
+    string "kube context name"
+    default phase1.cluster_name
+    help
+	  The name of the context in kubeconfig.
+	  This is optional to set and when set, the kubeconfig
+	  context is renamed to whatever is configured.
+
+config phase2.enable_cloud_provider
+	bool "Enable Cloud Provider(Experimental) ?"
+	default n
+	help
+	  Should we enable and initialize cloud provider for the cluster?
+
+config phase2.kubeadm.feature_gates
+	string "kubeadm feature gates"
+	default ""
+	help
+	  Enable or disable specific features of kubeadm.
+
+	  Valid options are a set of key-value pairs in format : "<key-1>=<values-1>,<key-2>=<value-2>,.."
+	  as of today values must be booleans : true or false
+	  see "--feature-gates" option of kubeadm for description of keys.
 
 endif
 

@@ -3,7 +3,7 @@ function(config)
   local cfg = config.phase1;
   local vms = std.makeArray(cfg.num_nodes + 1,function(node) node+1);
   local master_dependency_list = ["vsphere_virtual_machine.kubevm%d" % vm for vm in vms];
-  local node_name_to_ip = [("${vsphere_virtual_machine.kubevm%d.network_interface.0.ipv4_address} %s"  % [vm, (if vm == 1 then "master" else "node%d" % (vm-1) )])  for vm in vms];
+  local node_name_to_ip = [("${vsphere_virtual_machine.kubevm%d.network_interface.0.ipv4_address} %s"  % [vm, (if vm == 1 then std.join("", [cfg.cluster_name, "-master"]) else std.join("", [cfg.cluster_name, "-node", vm-1]) )])  for vm in vms];
   local vm_username = "root";
   local vm_password = "kubernetes";
 
@@ -15,13 +15,12 @@ function(config)
         "https://${vsphere_virtual_machine.kubevm1.network_interface.0.ipv4_address}",
       ));
 
-  local config_metadata_template = std.toString(config {
+  local config_metadata_template = config {
       master_ip: "${vsphere_virtual_machine.kubevm1.network_interface.0.ipv4_address}",
-      role: "%s",
       phase3 +: {
         addons_config: (import "phase3/all.jsonnet")(config),
       },
-    });
+    };
 
   std.mergePatch({
     // vSphere Configuration
@@ -74,14 +73,14 @@ function(config)
         cloudprovider: {
           template: "${file(\"vsphere.conf\")}",
           vars: {
-            username: cfg.vSphere.username,
-            password: cfg.vSphere.password,
-            vsphere_server: cfg.vSphere.url,
-            port: cfg.vSphere.port,
-            allow_unverified_ssl: cfg.vSphere.insecure,
-            datacenter: cfg.vSphere.datacenter,
-            datastore: cfg.vSphere.datastore,
-            working_dir: cfg.cluster_name,
+            username: std.escapeStringJson(cfg.vSphere.username),
+            password: std.escapeStringJson(cfg.vSphere.password),
+            vsphere_server: std.escapeStringJson(cfg.vSphere.url),
+            port: std.escapeStringJson(cfg.vSphere.port),
+            allow_unverified_ssl: std.escapeStringJson(cfg.vSphere.insecure),
+            datacenter: std.escapeStringJson(cfg.vSphere.datacenter),
+            datastore: std.escapeStringJson(cfg.vSphere.datastore),
+            working_dir: std.escapeStringJson(cfg.vSphere.vmfolderpath),
           },
         },
       },
@@ -92,12 +91,12 @@ function(config)
       "vsphere_folder":{
         "cluster_folder": {
           datacenter: cfg.vSphere.datacenter,
-          path: cfg.cluster_name,
+          path: cfg.vSphere.vmfolderpath,
         },
       },
       vsphere_virtual_machine: {
         ["kubevm" + vm]: {
-            name: (if vm == 1 then "master" else ("node%d" % (vm-1))),
+            name: if vm == 1 then std.join("", [cfg.cluster_name, "-master"]) else std.join("", [cfg.cluster_name, "-node", vm-1]),
             vcpu: cfg.vSphere.vcpu,
             memory: cfg.vSphere.memory,
             enable_disk_uuid: true,
@@ -129,7 +128,7 @@ function(config)
         } for vm in vms
       },
       null_resource: {
-        master: {
+      [cfg.cluster_name + "-master"]: {
             depends_on: master_dependency_list,
             connection: {
               user: vm_username,
@@ -140,8 +139,8 @@ function(config)
             {
                 "remote-exec": {
                   inline: [
-                    "hostnamectl set-hostname %s" % "master",
-                    "mkdir -p /etc/kubernetes/; echo '%s' > /etc/kubernetes/k8s_config.json " % (config_metadata_template % "master"),
+                    "hostnamectl set-hostname %s" % std.join("", [cfg.cluster_name, "-master"]),
+                    "mkdir -p /etc/kubernetes/; echo '%s' > /etc/kubernetes/k8s_config.json " % std.toString((config_metadata_template {role: "master"})),
                     "echo '%s' >  /etc/kubernetes/vsphere.conf" % "${data.template_file.cloudprovider.rendered}",
                     "echo '%s' > /etc/configure-vm.sh; bash /etc/configure-vm.sh" % "${data.template_file.configure_master.rendered}",
                   ]
@@ -154,12 +153,12 @@ function(config)
             },
             {
             "local-exec": {
-            command: "echo '%s' > ./.tmp/kubeconfig.json" % kubeconfig(cfg.cluster_name + "-admin", cfg.cluster_name, cfg.cluster_name),
+              command: "echo '%s' > clusters/%s/kubeconfig.json" % [ kubeconfig(cfg.cluster_name + "-admin", cfg.cluster_name, cfg.cluster_name), cfg.cluster_name ],
             },
            }
            ],
         },} + {
-        ["node" + vm]: {
+        [cfg.cluster_name + "-node" + vm]: {
             depends_on: ["vsphere_virtual_machine.kubevm1","vsphere_virtual_machine.kubevm%d" % vm],
             connection: {
               user: vm_username,
@@ -170,9 +169,8 @@ function(config)
             {
                 "remote-exec": {
                   inline: [
-                    "hostnamectl set-hostname %s" % ("node" + (vm-1)),
-                    "mkdir -p /etc/kubernetes/; echo '%s' > /etc/kubernetes/k8s_config.json " % (config_metadata_template % "node"),
-                    "echo '%s' >  /etc/kubernetes/vsphere.conf" % "${data.template_file.cloudprovider.rendered}",
+                    "hostnamectl set-hostname %s" % std.join("", [cfg.cluster_name, "-node", vm-1]),
+                    "mkdir -p /etc/kubernetes/; echo '%s' > /etc/kubernetes/k8s_config.json " % std.toString((config_metadata_template {role: "node"})),
                     "echo '%s' > /etc/configure-vm.sh; bash /etc/configure-vm.sh" % "${data.template_file.configure_node.rendered}",
                   ]
                 }

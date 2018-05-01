@@ -1,7 +1,7 @@
 #!/bin/bash
 set -eux -o pipefail
 
-apk add --update git build-base wget curl jq autoconf automake pkgconfig ncurses-dev libtool gperf flex bison ca-certificates python
+apk add --update git build-base wget curl jq autoconf automake pkgconfig ncurses-dev libtool gperf flex bison ca-certificates python openssh-client
 
 ## Install kubectl
 export KUBECTL_VERSION=1.6.0-beta.4
@@ -27,9 +27,6 @@ sed -i '/terraform_${TERRAFORM_VERSION}_linux_amd64.zip/!d' /tmp/terraform/terra
 sha256sum -cs terraform_${TERRAFORM_VERSION}_SHA256SUMS
 unzip terraform_${TERRAFORM_VERSION}_linux_amd64.zip -d /bin)
 rm -rf /tmp/terraform
-
-## Install azure-xplat-cli
-npm install -g azure-cli
 
 ## Install kconfig-conf
 export KCONFIG_VERSION=4.7.0.0

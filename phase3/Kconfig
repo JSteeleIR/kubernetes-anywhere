@@ -7,13 +7,23 @@ config phase3.run_addons
 	help
 	  Should we deploy the addon manager?
 
-if phase3.run_addons
+if phase3.run_addons && phase2.provider != kubeadm
 
 config phase3.kube_proxy
 	bool "Run kube-proxy?"
 	default y
 	help
 	  Should we deploy the kube-proxy to nodes?
+
+config phase3.kube_dns
+	bool "Run kube-dns?"
+	default y
+	help
+	  Should we deploy kube-dns?
+
+endif 
+
+if phase3.run_addons 
 
 config phase3.dashboard
 	bool "Run the dashboard?"
@@ -27,17 +37,32 @@ config phase3.heapster
 	help
 	  Should we deploy heapster?
 
-config phase3.kube_dns
-	bool "Run kube-dns?"
-	default y
-	help
-	  Should we deploy kube-dns?
-
 config phase3.weave_net
 	bool "Run weave-net?"
 	default n
 	help
-	  Should we deploy weave-net? You likely only want this if using kubeadm for phase2.
+	  [Deprecated] Please use phase3.cni instead.
+
+		Should we deploy weave-net? You likely only want this if using kubeadm for phase2.
+
+if phase3.weave_net = n
+config phase3.cni
+	string "CNI plugin to use"
+	default ""
+	help
+	  CNI plugin to use. You likely only want this if using kubeadm for phase2.
+          Valid options are (calico, flannel, weave).
+endif
+
+if phase1.cloud_provider = gce
+config phase3.gce_storage_class
+	depends on phase2.enable_cloud_provider
+	bool "Deploy default storage class?"
+	default n
+	help
+	  Should we deploy default storage class for GCE?
+endif
+
 endif
 
 endmenu
